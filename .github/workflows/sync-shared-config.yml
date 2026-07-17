@@ -24,14 +24,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Set up Homebrew
+        id: set-up-homebrew
         uses: Homebrew/actions/setup-homebrew@18fcb8e3e06b4247c676c506750dc95ea7226479 # 2026.07.13.1
         with:
           stable: false
 
       - name: Set up Homebrew portable Ruby
-        uses: Homebrew/actions/setup-ruby@18fcb8e3e06b4247c676c506750dc95ea7226479 # 2026.07.13.1
+        uses: Homebrew/actions/setup-ruby@main
         with:
+          bundler-cache: true
           portable-ruby: true
+          working-directory: ${{ steps.set-up-homebrew.outputs.repository-path }}/Library/Homebrew
+        env:
+          BUNDLE_WITH: style:formula_test
 
       - name: Check out shared configuration
         run: |
