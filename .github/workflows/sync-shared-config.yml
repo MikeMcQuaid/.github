@@ -1,0 +1,159 @@
+name: Sync shared configuration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "0 8 * * 3" # Every Wednesday at 08:00 UTC.
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash -xeuo pipefail {0}
+
+concurrency:
+  group: "sync-shared-config-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@18fcb8e3e06b4247c676c506750dc95ea7226479 # 2026.07.13.1
+        with:
+          stable: false
+
+      - name: Set up Homebrew portable Ruby
+        uses: Homebrew/actions/setup-ruby@18fcb8e3e06b4247c676c506750dc95ea7226479 # 2026.07.13.1
+        with:
+          portable-ruby: true
+
+      - name: Check out shared configuration
+        run: |
+          git init --quiet
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Install style and test dependencies
+        run: brew install-bundler-gems --groups=style,formula_test
+        env:
+          HOMEBREW_DEVELOPER: 1
+
+      - name: Run style checks
+        run: brew style .github/actions/sync/*.rb
+        env:
+          HOMEBREW_DEVELOPER: 1
+
+      - name: Test shared configuration
+        run: brew ruby .github/actions/sync/shared_config_test.rb
+
+  generate-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate-matrix.outputs.matrix }}
+    steps:
+      - name: Generate repository matrix
+        id: generate-matrix
+        run: |
+          curl --fail --silent --show-error --location \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            --output "${RUNNER_TEMP}/repositories.json" \
+            "https://api.github.com/users/${GITHUB_REPOSITORY_OWNER}/repos?per_page=100&type=owner"
+
+          repositories=()
+          while IFS= read -r repository; do
+            if curl --fail --silent --location --output /dev/null \
+                    "https://raw.githubusercontent.com/${repository}/HEAD/.ruby-version" ||
+               curl --fail --silent --location --output /dev/null \
+                    "https://raw.githubusercontent.com/${repository}/HEAD/.github/dependabot.yml"
+            then
+              repositories+=("${repository}")
+            fi
+          done < <(
+            jq -r \
+              '.[] | select(.fork == false and .archived == false and .private == false) | .full_name' \
+              "${RUNNER_TEMP}/repositories.json"
+          )
+          printf 'matrix=' >> "${GITHUB_OUTPUT}"
+          jq -cn '$ARGS.positional' --args -- "${repositories[@]}" >> "${GITHUB_OUTPUT}"
+
+  sync:
+    needs: [generate-matrix, test]
+    if: needs.generate-matrix.outputs.matrix != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repository: ${{ fromJSON(needs.generate-matrix.outputs.matrix) }}
+    steps:
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@18fcb8e3e06b4247c676c506750dc95ea7226479 # 2026.07.13.1
+        with:
+          stable: false
+
+      - name: Set up Homebrew portable Ruby
+        uses: Homebrew/actions/setup-ruby@18fcb8e3e06b4247c676c506750dc95ea7226479 # 2026.07.13.1
+        with:
+          portable-ruby: true
+
+      - name: Check out shared configuration
+        run: |
+          git init --quiet
+          git remote add origin "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_REF}"
+          git checkout --detach FETCH_HEAD
+
+      - name: Clone target repository
+        run: git clone --depth=1 "https://github.com/${{ matrix.repository }}.git" target
+
+      - name: Synchronise configuration
+        id: synchronise
+        run: |
+          brew ruby .github/actions/sync/shared-config.rb target
+          git -C target diff --check
+          git -C target status --short
+          if [[ -z "$(git -C target status --porcelain)" ]]; then
+            exit
+          fi
+
+          git -C target config user.name "github-actions[bot]"
+          git -C target config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C target switch --create sync-shared-config
+          git -C target add --all
+          git -C target commit --message "Synchronise shared configuration"
+          printf 'pull_request=true\n' >> "${GITHUB_OUTPUT}"
+
+      - name: Create or update pull request
+        if: >-
+          github.actor != 'dependabot[bot]' &&
+          github.event.repository.fork == false &&
+          (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+          steps.synchronise.outputs.pull_request == 'true'
+        env:
+          GH_REPO: ${{ matrix.repository }}
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
+        working-directory: target
+        run: |
+          if [[ -z "${GH_TOKEN}" ]]; then
+            echo "::notice::SYNC_TOKEN is not set; skipping push and pull request"
+            exit
+          fi
+
+          gh auth setup-git
+          if git ls-remote --exit-code --heads origin sync-shared-config &>/dev/null; then
+            git fetch origin refs/heads/sync-shared-config:refs/remotes/origin/sync-shared-config
+          fi
+          git push --set-upstream --force-with-lease origin sync-shared-config
+          if [[ "$(gh pr list --head sync-shared-config --state open --json number --jq length)" == 0 ]]; then
+            gh pr create \
+              --head sync-shared-config \
+              --title "Synchronise shared configuration" \
+              --body "Created automatically by the [\`sync-shared-config\`](https://github.com/MikeMcQuaid/.github/blob/HEAD/.github/workflows/sync-shared-config.yml) workflow."
+          fi
