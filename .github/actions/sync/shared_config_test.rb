@@ -42,6 +42,8 @@ class SharedConfigTest < Minitest::Test
       (target/".github/dependabot.yml").write("version: 2\nupdates: []\n")
       (target/"Gemfile").write("source \"https://rubygems.org\"\n")
       (target/"Gemfile.lock").write("BUNDLED WITH\n   4.0.0\n")
+      (target/"Package.swift").write("// swift-tools-version: 6.4\n")
+      (target/"Package.resolved").write("{}\n")
 
       run_sync(target)
 
@@ -49,7 +51,7 @@ class SharedConfigTest < Minitest::Test
       assert_match(%r{\A# This file is synced from `MikeMcQuaid/\.github`, do not modify it directly\.\n},
                    dependabot_path.read)
       config = YAML.safe_load_file(dependabot_path)
-      assert_equal %w[bundler github-actions],
+      assert_equal %w[bundler github-actions swift],
                    config.fetch("updates").map { |update| update.fetch("package-ecosystem") }.sort
       assert(config.fetch("updates").all? { |update| update.fetch("schedule").fetch("day") == "friday" })
       refute_path_exists target/".ruby-version"
@@ -68,7 +70,8 @@ class SharedConfigTest < Minitest::Test
 
       bundle_arguments = bundle_log.readlines(chomp: true)
       refute_empty bundle_arguments.shift
-      assert_equal %w[update --ruby --bundler --quiet], bundle_arguments
+      bundler_version = Gem::Specification.find_by_name("bundler").version.to_s
+      assert_equal ["update", "--ruby", "--bundler=#{bundler_version}", "--quiet"], bundle_arguments
     end
   end
 
