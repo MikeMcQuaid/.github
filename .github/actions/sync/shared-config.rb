@@ -27,6 +27,7 @@ if dependabot.file?
       "bundler"        => %w[Gemfile Gemfile.lock],
       "docker"         => %w[Dockerfile],
       "github-actions" => %w[.github/workflows],
+      "swift"          => %w[Package.swift Package.resolved],
     }.fetch(update.fetch("package-ecosystem")).all? { |path| (target/path).exist? }
   end
   dependabot.write(
