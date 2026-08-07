@@ -33,7 +33,7 @@ jobs:
         run: printf 'path=%s\n' "$(brew --repository)/Library/Homebrew" >> "${GITHUB_OUTPUT}"
 
       - name: Set up Homebrew portable Ruby
-        uses: Homebrew/actions/setup-ruby@main
+        uses: Homebrew/actions/setup-ruby@fd832223f9f99ebf0244dd20658680e5d4aca049 # 2026.08.03.2
         with:
           bundler-cache: true
           portable-ruby: true
@@ -70,9 +70,12 @@ jobs:
     steps:
       - name: Generate repository matrix
         id: generate-matrix
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           curl --fail --silent --show-error --location \
             --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
             --header "X-GitHub-Api-Version: 2022-11-28" \
             --output "${RUNNER_TEMP}/repositories.json" \
             "https://api.github.com/users/${GITHUB_REPOSITORY_OWNER}/repos?per_page=100&type=owner"
@@ -121,7 +124,9 @@ jobs:
           git checkout --detach FETCH_HEAD
 
       - name: Clone target repository
-        run: git clone --depth=1 "https://github.com/${{ matrix.repository }}.git" target
+        env:
+          TARGET_REPOSITORY: ${{ matrix.repository }}
+        run: git clone --depth=1 "https://github.com/${TARGET_REPOSITORY}.git" target
 
       - name: Synchronise configuration
         id: synchronise
