@@ -60,6 +60,8 @@ jobs:
 
       - name: Test shared configuration
         run: brew ruby .github/actions/sync/shared_config_test.rb
+        env:
+          HOMEBREW_DEVELOPER: 1
 
   generate-matrix:
     runs-on: ubuntu-latest
@@ -123,6 +125,8 @@ jobs:
 
       - name: Synchronise configuration
         id: synchronise
+        env:
+          HOMEBREW_DEVELOPER: 1
         run: |
           brew ruby .github/actions/sync/shared-config.rb target
           git -C target diff --check

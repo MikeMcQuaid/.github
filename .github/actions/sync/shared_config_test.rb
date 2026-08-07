@@ -70,7 +70,8 @@ class SharedConfigTest < Minitest::Test
 
       bundle_arguments = bundle_log.readlines(chomp: true)
       refute_empty bundle_arguments.shift
-      assert_equal %w[update --ruby --bundler --quiet], bundle_arguments
+      bundler_version = Gem::Specification.find_by_name("bundler").version.to_s
+      assert_equal ["update", "--ruby", "--bundler=#{bundler_version}", "--quiet"], bundle_arguments
     end
   end
 

@@ -37,12 +37,21 @@ end
 
 # Refresh Ruby and Bundler metadata in an existing lockfile using an isolated bundle path.
 if sync_ruby_version && (target/"Gemfile").file? && (target/"Gemfile.lock").file?
+  bundler_version = Gem::Specification.find_by_name("bundler").version.to_s
   Dir.mktmpdir do |bundle_path|
     Homebrew.safe_system(
-      { "BUNDLE_PATH" => bundle_path },
+      {
+        "BUNDLE_PATH"     => bundle_path,
+        # Stop Bundler switching to the lockfile's version at startup: it may
+        # only resolve under an older system Ruby, which then rejects the
+        # freshly synced `.ruby-version` in the Gemfile.
+        "BUNDLER_VERSION" => bundler_version,
+      },
       Gem.ruby,
       ARGV.fetch(1) { Gem.bin_path("bundler", "bundle") },
-      "update", "--ruby", "--bundler", "--quiet",
+      # Pin --bundler to the running version: bare --bundler installs the
+      # newest Bundler and re-execs it through the system Ruby.
+      "update", "--ruby", "--bundler=#{bundler_version}", "--quiet",
       chdir: target,
       out:   File::NULL
     )
