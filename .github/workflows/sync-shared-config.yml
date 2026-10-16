@@ -39,7 +39,7 @@ jobs:
           portable-ruby: true
           working-directory: ${{ steps.homebrew-library.outputs.path }}
         env:
-          BUNDLE_WITH: style:formula_test
+          BUNDLE_WITH: style
 
       - name: Check out shared configuration
         run: |
@@ -48,8 +48,8 @@ jobs:
           git fetch --depth=1 origin "${GITHUB_REF}"
           git checkout --detach FETCH_HEAD
 
-      - name: Install style and test dependencies
-        run: brew install-bundler-gems --groups=style,formula_test
+      - name: Install style dependencies
+        run: brew install-bundler-gems --groups=style
         env:
           HOMEBREW_DEVELOPER: 1
 
@@ -58,10 +58,14 @@ jobs:
         env:
           HOMEBREW_DEVELOPER: 1
 
+      - name: Set up Ruby
+        uses: Homebrew/actions/setup-ruby@fd832223f9f99ebf0244dd20658680e5d4aca049 # 2026.08.03.2
+
+      - name: Install test dependencies
+        run: gem install minitest --no-document
+
       - name: Test shared configuration
-        run: brew ruby .github/actions/sync/shared_config_test.rb
-        env:
-          HOMEBREW_DEVELOPER: 1
+        run: ruby .github/actions/sync/shared_config_test.rb
 
   generate-matrix:
     runs-on: ubuntu-latest
@@ -111,10 +115,8 @@ jobs:
         with:
           stable: false
 
-      - name: Set up Homebrew portable Ruby
+      - name: Set up Ruby
         uses: Homebrew/actions/setup-ruby@18fcb8e3e06b4247c676c506750dc95ea7226479 # 2026.07.13.1
-        with:
-          portable-ruby: true
 
       - name: Check out shared configuration
         run: |
@@ -130,10 +132,8 @@ jobs:
 
       - name: Synchronise configuration
         id: synchronise
-        env:
-          HOMEBREW_DEVELOPER: 1
         run: |
-          brew ruby .github/actions/sync/shared-config.rb target
+          ruby .github/actions/sync/shared-config.rb target
           git -C target diff --check
           git -C target status --short
           if [[ -z "$(git -C target status --porcelain)" ]]; then
