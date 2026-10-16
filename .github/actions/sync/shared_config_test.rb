@@ -43,7 +43,6 @@ class SharedConfigTest < Minitest::Test
       (target/"Gemfile").write("source \"https://rubygems.org\"\n")
       (target/"Gemfile.lock").write("BUNDLED WITH\n   4.0.0\n")
       (target/"Package.swift").write("// swift-tools-version: 6.4\n")
-      (target/"Package.resolved").write("{}\n")
 
       run_sync(target)
 
