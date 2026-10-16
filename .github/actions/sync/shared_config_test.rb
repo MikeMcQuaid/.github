@@ -75,6 +75,24 @@ class SharedConfigTest < Minitest::Test
     end
   end
 
+  def test_fails_when_bundler_fails
+    Dir.mktmpdir do |directory|
+      target = Pathname(directory)
+      (target/".ruby-version").write("3.1.2\n")
+      (target/"Gemfile").write("source \"https://rubygems.org\"\n")
+      (target/"Gemfile.lock").write("BUNDLED WITH\n   4.0.0\n")
+      bundle_log, bundle_executable = fake_bundle(target)
+      bundle_executable.open("a") { |file| file.puts "exit 1" }
+
+      _, _, status = Open3.capture3(
+        Gem.ruby, (Pathname(__dir__)/"shared-config.rb").to_s, target.to_s, bundle_executable.to_s
+      )
+
+      assert_path_exists bundle_log
+      refute_predicate status, :success?
+    end
+  end
+
   private
 
   def fake_bundle(target)
@@ -88,8 +106,7 @@ class SharedConfigTest < Minitest::Test
 
   def run_sync(target, *arguments)
     output, error, status = Open3.capture3(
-      HOMEBREW_BREW_FILE.to_s,
-      "ruby",
+      Gem.ruby,
       (Pathname(__dir__)/"shared-config.rb").to_s,
       target.to_s,
       *arguments.map(&:to_s),

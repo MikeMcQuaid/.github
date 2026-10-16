@@ -13,7 +13,7 @@ abort "#{target} is not a directory" unless target.directory?
 ruby_version = target/".ruby-version"
 dependabot = target/".github/dependabot.yml"
 
-# Match an existing Ruby version to Homebrew portable Ruby without downgrading a newer target.
+# Match an existing Ruby version to the running Ruby without downgrading a newer target.
 shared_ruby_version = "#{RUBY_VERSION}\n"
 sync_ruby_version = ruby_version.file? &&
                     Gem::Version.new(shared_ruby_version.chomp) >= Gem::Version.new(ruby_version.read.chomp)
@@ -39,7 +39,7 @@ end
 if sync_ruby_version && (target/"Gemfile").file? && (target/"Gemfile.lock").file?
   bundler_version = Gem::Specification.find_by_name("bundler").version.to_s
   Dir.mktmpdir do |bundle_path|
-    Homebrew.safe_system(
+    system(
       {
         "BUNDLE_PATH"     => bundle_path,
         # Stop Bundler switching to the lockfile's version at startup: it may
@@ -52,8 +52,9 @@ if sync_ruby_version && (target/"Gemfile").file? && (target/"Gemfile.lock").file
       # Pin --bundler to the running version: bare --bundler installs the
       # newest Bundler and re-execs it through the system Ruby.
       "update", "--ruby", "--bundler=#{bundler_version}", "--quiet",
-      chdir: target,
-      out:   File::NULL
+      chdir:     target,
+      out:       File::NULL,
+      exception: true
     )
   end
 end
