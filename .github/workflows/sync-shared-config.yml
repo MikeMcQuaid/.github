@@ -165,6 +165,7 @@ jobs:
 
           gh auth setup-git
           if git ls-remote --exit-code --heads origin sync-shared-config &>/dev/null; then
+            git remote set-branches --add origin sync-shared-config
             git fetch origin refs/heads/sync-shared-config:refs/remotes/origin/sync-shared-config
           fi
           git push --set-upstream --force-with-lease origin sync-shared-config
