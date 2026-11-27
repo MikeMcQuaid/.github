@@ -93,6 +93,13 @@ class SharedConfigTest < Minitest::Test
   end
 
   def test_creates_and_updates_sync_branches_from_a_shallow_clone
+    push_branch_script = YAML.safe_load_file(Pathname(__dir__)/"../../workflows/sync-shared-config.yml")
+                             .fetch("jobs")
+                             .fetch("sync")
+                             .fetch("steps")
+                             .find { |step| step.fetch("name") == "Push sync branch" }
+                             .fetch("run")
+
     [false, true].each do |existing_branch|
       Dir.mktmpdir do |directory|
         output, error, status = Open3.capture3(
@@ -121,14 +128,10 @@ class SharedConfigTest < Minitest::Test
             git switch --create sync-shared-config
             git -c commit.gpgsign=false commit --allow-empty --message updated
 
-            gh() {
-              if [[ "$1 $2" == "pr list" ]]; then
-                echo #{existing_branch ? 1 : 0}
-              fi
-            }
-            #{YAML.safe_load_file(Pathname(__dir__)/"../../workflows/sync-shared-config.yml")
-                  .fetch("jobs").fetch("sync").fetch("steps")
-                  .find { |step| step.fetch("name") == "Create or update pull request" }.fetch("run")}
+            export GITHUB_OUTPUT="$PWD/push-output"
+            gh() { [[ "$*" == "auth setup-git" ]]; }
+            #{push_branch_script}
+            grep -qx pushed=true "$GITHUB_OUTPUT"
             test "$(git rev-parse HEAD)" = "$(git ls-remote origin refs/heads/sync-shared-config | cut -f1)"
           SH
         )
