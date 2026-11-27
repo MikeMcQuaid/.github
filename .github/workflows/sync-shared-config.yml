@@ -147,7 +147,8 @@ jobs:
           git -C target commit --message "Synchronise shared configuration"
           printf 'pull_request=true\n' >> "${GITHUB_OUTPUT}"
 
-      - name: Create or update pull request
+      - name: Push sync branch
+        id: push
         if: >-
           github.actor != 'dependabot[bot]' &&
           github.event.repository.fork == false &&
@@ -169,9 +170,16 @@ jobs:
             git fetch origin refs/heads/sync-shared-config:refs/remotes/origin/sync-shared-config
           fi
           git push --set-upstream --force-with-lease origin sync-shared-config
-          if [[ "$(gh pr list --head sync-shared-config --state open --json number --jq length)" == 0 ]]; then
-            gh pr create \
-              --head sync-shared-config \
-              --title "Synchronise shared configuration" \
-              --body "Created automatically by the [\`sync-shared-config\`](https://github.com/MikeMcQuaid/.github/blob/HEAD/.github/workflows/sync-shared-config.yml) workflow."
-          fi
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Get or open sync pull request
+        if: steps.push.outputs.pushed == 'true'
+        # TODO: Pin a released Homebrew/actions commit and add its version tag.
+        uses: Homebrew/actions/get-or-create-pull-request@b4c226ae32acab42c7c2c0745ad224a1e9958022
+        with:
+          repository: ${{ matrix.repository }}
+          read-token: ${{ secrets.SYNC_TOKEN }}
+          token: ${{ secrets.SYNC_TOKEN }}
+          head: sync-shared-config
+          title: Synchronise shared configuration
+          body: Created automatically by the [`sync-shared-config`](https://github.com/MikeMcQuaid/.github/blob/HEAD/.github/workflows/sync-shared-config.yml) workflow.
